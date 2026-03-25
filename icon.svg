@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Monitor -->
+  <rect x="4" y="8" width="56" height="36" rx="4" ry="4" fill="#1e88e5"/>
+  <!-- Screen -->
+  <rect x="8" y="12" width="48" height="28" rx="2" ry="2" fill="#0d1117"/>
+  <!-- Stand -->
+  <rect x="26" y="44" width="12" height="8" fill="#1565c0"/>
+  <rect x="18" y="52" width="28" height="4" rx="2" ry="2" fill="#1565c0"/>
+  <!-- Remote cursor arrow -->
+  <polygon points="16,18 16,34 20,30 23,37 26,36 23,29 28,29" fill="#ffffff"/>
+  <!-- Signal waves -->
+  <path d="M36 22 Q40 26 36 30" fill="none" stroke="#4fc3f7" stroke-width="2" stroke-linecap="round"/>
+  <path d="M39 19 Q45 26 39 33" fill="none" stroke="#4fc3f7" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=XFreeRDP GUI
+Comment=Graphical frontend for FreeRDP
+Exec=/home/taufiq/RiderProjects/XFreeRDP/run.sh
+Icon=/home/taufiq/RiderProjects/XFreeRDP/icon.svg
+Terminal=false
+Type=Application
+Categories=Network;RemoteAccess;
+Keywords=rdp;freerdp;remote;desktop;
