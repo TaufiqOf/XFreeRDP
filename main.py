@@ -109,8 +109,8 @@ class XFreeRDPApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("XFreeRDP GUI")
-        self.geometry("750x720")
-        self.minsize(750, 720)
+        self.geometry("800x720")
+        self.minsize(800, 720)
 
         ensure_config_dir()
         self.profiles = self._load_profiles()
@@ -230,14 +230,14 @@ class XFreeRDPApp(tk.Tk):
         self.profile_combo.bind("<<ComboboxSelected>>", self._on_profile_selected)
         self._refresh_profile_list()
 
-        ttk.Button(bar, text="Save",   command=self._save_profile).pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text="Load",   command=self._load_profile).pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text="Delete", command=self._delete_profile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="💾 Save",   command=self._save_profile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="📂 Load",   command=self._load_profile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="🗑️  Delete", command=self._delete_profile).pack(side=tk.LEFT, padx=2)
 
     # ── Connection tab ─────────────────────────────────────────────────────
     def _build_connection_tab(self):
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="  Connection  ")
+        self.notebook.add(frame, text="🔌 Connection")
         g = ttk.Frame(frame, padding=14)
         g.pack(fill=tk.BOTH, expand=True)
 
@@ -282,7 +282,7 @@ class XFreeRDPApp(tk.Tk):
     # ── Display tab ────────────────────────────────────────────────────────
     def _build_display_tab(self):
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="  Display  ")
+        self.notebook.add(frame, text="🖥️  Display")
         g = ttk.Frame(frame, padding=14)
         g.pack(fill=tk.BOTH, expand=True)
 
@@ -345,7 +345,7 @@ class XFreeRDPApp(tk.Tk):
     # ── Network tab ────────────────────────────────────────────────────────
     def _build_network_tab(self):
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="  Network  ")
+        self.notebook.add(frame, text="🌐 Network")
         g = ttk.Frame(frame, padding=14)
         g.pack(fill=tk.BOTH, expand=True)
 
@@ -386,7 +386,7 @@ class XFreeRDPApp(tk.Tk):
     # ── Features tab ───────────────────────────────────────────────────────
     def _build_features_tab(self):
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="  Features  ")
+        self.notebook.add(frame, text="✨ Features")
         g = ttk.Frame(frame, padding=14)
         g.pack(fill=tk.BOTH, expand=True)
 
@@ -425,8 +425,8 @@ class XFreeRDPApp(tk.Tk):
         self.drives_listbox.configure(yscrollcommand=scrollbar.set)
         dr_btns = ttk.Frame(drives_frame)
         dr_btns.pack(side=tk.LEFT, padx=(6, 0), anchor=tk.N)
-        ttk.Button(dr_btns, text="Add",    command=self._add_drive).pack(pady=2, fill=tk.X)
-        ttk.Button(dr_btns, text="Remove", command=self._remove_drive).pack(pady=2, fill=tk.X)
+        ttk.Button(dr_btns, text="➕ Add",    command=self._add_drive).pack(pady=2, fill=tk.X)
+        ttk.Button(dr_btns, text="➖ Remove", command=self._remove_drive).pack(pady=2, fill=tk.X)
         row += 1
 
         # RemoteApp
@@ -448,7 +448,7 @@ class XFreeRDPApp(tk.Tk):
     # ── Security tab ───────────────────────────────────────────────────────
     def _build_security_tab(self):
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="  Security  ")
+        self.notebook.add(frame, text="🔒 Security")
         g = ttk.Frame(frame, padding=14)
         g.pack(fill=tk.BOTH, expand=True)
 
@@ -490,7 +490,7 @@ class XFreeRDPApp(tk.Tk):
     # ── Advanced tab ───────────────────────────────────────────────────────
     def _build_advanced_tab(self):
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="  Advanced  ")
+        self.notebook.add(frame, text="⚙️  Advanced")
         g = ttk.Frame(frame, padding=14)
         g.pack(fill=tk.BOTH, expand=True)
 
@@ -539,7 +539,7 @@ class XFreeRDPApp(tk.Tk):
             pady=4,
         )
         self.cmd_text.pack(fill=tk.X)
-        ttk.Button(self._preview_lf, text="Copy to clipboard", command=self._copy_command).pack(
+        ttk.Button(self._preview_lf, text="📋 Copy to clipboard", command=self._copy_command).pack(
             anchor=tk.E, pady=(4, 2)
         )
 
@@ -548,15 +548,17 @@ class XFreeRDPApp(tk.Tk):
         if not self._load_settings().get("preview_visible", False):
             self._preview_lf.pack_forget()
             self._preview_visible = False
-            self._preview_btn.config(text="Show command")
+            self._preview_btn.config(text="👁️  Show")
+        else:
+            self._preview_btn.config(text="👁️  Hide")
 
     def _toggle_preview(self):
         if self._preview_visible:
             self._preview_lf.pack_forget()
-            self._preview_btn.config(text="Show command")
+            self._preview_btn.config(text="👁️  Show")
         else:
             self._preview_lf.pack(fill=tk.X, pady=(8, 0), before=self._bottom_bar)
-            self._preview_btn.config(text="Hide command")
+            self._preview_btn.config(text="👁️  Hide")
         self._preview_visible = not self._preview_visible
         self._save_settings()
 
@@ -565,10 +567,10 @@ class XFreeRDPApp(tk.Tk):
         self._bottom_bar = ttk.Frame(parent)
         self._bottom_bar.pack(fill=tk.X, pady=(8, 0))
 
-        ttk.Button(self._bottom_bar, text="Quit", command=self.quit).pack(side=tk.RIGHT, padx=(6, 0))
+        ttk.Button(self._bottom_bar, text="⛔ Quit", command=self.quit).pack(side=tk.RIGHT, padx=(6, 0))
         ttk.Button(
             self._bottom_bar,
-            text="  Connect  ",
+            text="🔗 Connect",
             command=self._connect,
             style="Connect.TButton",
         ).pack(side=tk.RIGHT)
@@ -577,7 +579,7 @@ class XFreeRDPApp(tk.Tk):
         self._theme_btn = ttk.Button(self._bottom_bar, text=theme_label, command=self._toggle_dark_mode, width=9)
         self._theme_btn.pack(side=tk.LEFT)
 
-        self._preview_btn = ttk.Button(self._bottom_bar, text="Hide command", command=self._toggle_preview, width=15)
+        self._preview_btn = ttk.Button(self._bottom_bar, text="👁️  Show", command=self._toggle_preview, width=10)
         self._preview_btn.pack(side=tk.LEFT, padx=(6, 0))
         self._apply_initial_preview_state()
     # ── Helpers ────────────────────────────────────────────────────────────
