@@ -38,6 +38,7 @@ def _detect_system_dark() -> bool:
         pass
     return False
 
+
 CONFIG_DIR = Path.home() / ".config" / "xfreerdp-gui"
 PROFILES_FILE = CONFIG_DIR / "profiles.json"
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
@@ -45,6 +46,47 @@ SETTINGS_FILE = CONFIG_DIR / "settings.json"
 
 def ensure_config_dir():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tooltip helper
+# ─────────────────────────────────────────────────────────────────────────────
+class Tooltip:
+    """Simple hover tooltip for any tkinter widget."""
+
+    def __init__(self, widget, text: str):
+        self._widget = widget
+        self._text = text
+        self._tip_window = None
+        widget.bind("<Enter>", self._show)
+        widget.bind("<Leave>", self._hide)
+
+    def _show(self, _event=None):
+        if self._tip_window or not self._text:
+            return
+        x = self._widget.winfo_rootx() + 20
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        self._tip_window = tw = tk.Toplevel(self._widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        tk.Label(
+            tw,
+            text=self._text,
+            background="#ffffe0",
+            foreground="#1a1a1a",
+            relief=tk.SOLID,
+            borderwidth=1,
+            font=("", 8),
+            padx=6,
+            pady=3,
+            wraplength=300,
+            justify=tk.LEFT,
+        ).pack()
+
+    def _hide(self, _event=None):
+        if self._tip_window:
+            self._tip_window.destroy()
+            self._tip_window = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -109,8 +151,8 @@ class XFreeRDPApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("XFreeRDP GUI")
-        self.geometry("800x720")
-        self.minsize(800, 720)
+        self.geometry("870x800")
+        self.minsize(870, 800)
 
         ensure_config_dir()
         self.profiles = self._load_profiles()
@@ -120,6 +162,10 @@ class XFreeRDPApp(tk.Tk):
         self._set_window_icon()
         self._build_ui()
         self._refresh_command_preview()
+
+        # Global keyboard shortcuts
+        self.bind("<Control-Return>", lambda _: self._connect())
+        self.bind("<Control-s>",      lambda _: self._save_profile())
 
     # ── Window icon ─────────────────────────────────────────────────────
     def _set_window_icon(self):
@@ -153,8 +199,9 @@ class XFreeRDPApp(tk.Tk):
         else:
             self._apply_manual_theme()
         style = ttk.Style(self)
-        style.configure("TNotebook.Tab", padding=[10, 4])
+        style.configure("TNotebook.Tab", padding=[12, 5])
         style.configure("Connect.TButton", font=("", 10, "bold"))
+        style.configure("Shortcut.TLabel", font=("", 9, "bold"))
 
     def _apply_manual_theme(self):
         """Fallback dark/light colouring when sv-ttk is not available."""
@@ -166,29 +213,32 @@ class XFreeRDPApp(tk.Tk):
             trough   = "#404040"
             self.configure(bg=bg)
             style.theme_use("clam")
-            style.configure(".",            background=bg, foreground=fg, fieldbackground=ebg)
-            style.configure("TFrame",       background=bg)
-            style.configure("TLabel",       background=bg, foreground=fg)
-            style.configure("TLabelframe",  background=bg, foreground=fg)
-            style.configure("TLabelframe.Label", background=bg, foreground=fg)
-            style.configure("TNotebook",    background=bg)
-            style.configure("TNotebook.Tab",background=bg, foreground=fg)
-            style.map("TNotebook.Tab",      background=[("selected", selbg)], foreground=[("selected", "#ffffff")])
-            style.configure("TEntry",       fieldbackground=ebg, foreground=efg, insertcolor=fg)
-            style.configure("TCombobox",    fieldbackground=ebg, foreground=efg, selectbackground=selbg)
-            style.configure("TButton",      background="#4a4a4a", foreground=fg)
-            style.map("TButton",            background=[("active", "#5a5a5a")])
-            style.configure("TCheckbutton", background=bg, foreground=fg)
-            style.configure("TScrollbar",   background=bg, troughcolor=trough)
+            style.configure(".",                  background=bg, foreground=fg, fieldbackground=ebg)
+            style.configure("TFrame",             background=bg)
+            style.configure("TLabel",             background=bg, foreground=fg)
+            style.configure("TLabelframe",        background=bg, foreground=fg)
+            style.configure("TLabelframe.Label",  background=bg, foreground=fg)
+            style.configure("TNotebook",          background=bg)
+            style.configure("TNotebook.Tab",      background=bg, foreground=fg)
+            style.map("TNotebook.Tab",            background=[("selected", selbg)],
+                                                  foreground=[("selected", "#ffffff")])
+            style.configure("TEntry",             fieldbackground=ebg, foreground=efg, insertcolor=fg)
+            style.configure("TCombobox",          fieldbackground=ebg, foreground=efg,
+                                                  selectbackground=selbg)
+            style.configure("TButton",            background="#4a4a4a", foreground=fg)
+            style.map("TButton",                  background=[("active", "#5a5a5a")])
+            style.configure("TCheckbutton",       background=bg, foreground=fg)
+            style.configure("TScrollbar",         background=bg, troughcolor=trough)
+            style.configure("Shortcut.TLabel",    background=bg, foreground=fg, font=("", 9, "bold"))
         else:
             style.theme_use("clam")
+            style.configure("Shortcut.TLabel",    font=("", 9, "bold"))
 
     def _toggle_dark_mode(self):
         self._dark_mode = not self._dark_mode
         self._apply_theme()
         self._update_cmd_text_colors()
-        label = "☀ Light" if self._dark_mode else "☾ Dark"
-        self._theme_btn.config(text=label)
+        self._theme_btn.config(text="☀ Light" if self._dark_mode else "☾ Dark")
         self._save_theme_setting()
 
     def _update_cmd_text_colors(self):
@@ -217,296 +267,371 @@ class XFreeRDPApp(tk.Tk):
 
         self._build_command_preview(root_pad)
         self._build_bottom_buttons(root_pad)
+        self._build_status_bar(root_pad)
 
     # ── Profile bar ────────────────────────────────────────────────────────
     def _build_profile_bar(self, parent):
-        bar = ttk.LabelFrame(parent, text="Profile", padding=(8, 4))
+        bar = ttk.LabelFrame(parent, text="Profiles", padding=(8, 6))
         bar.pack(fill=tk.X, pady=(0, 4))
 
         ttk.Label(bar, text="Name:").pack(side=tk.LEFT, padx=(0, 4))
         self.profile_var = tk.StringVar()
-        self.profile_combo = ttk.Combobox(bar, textvariable=self.profile_var, width=26)
-        self.profile_combo.pack(side=tk.LEFT, padx=(0, 4))
+        self.profile_combo = ttk.Combobox(bar, textvariable=self.profile_var, width=28)
+        self.profile_combo.pack(side=tk.LEFT, padx=(0, 8))
         self.profile_combo.bind("<<ComboboxSelected>>", self._on_profile_selected)
         self._refresh_profile_list()
+        Tooltip(self.profile_combo, "Type a name and click Save, or select an existing profile.")
 
-        ttk.Button(bar, text="💾 Save",   command=self._save_profile).pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text="📂 Load",   command=self._load_profile).pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text="🗑️  Delete", command=self._delete_profile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="💾 Save",   command=self._save_profile, width=9).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="📂 Load",   command=self._load_profile, width=9).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="🗑 Delete", command=self._delete_profile, width=9).pack(side=tk.LEFT, padx=2)
 
     # ── Connection tab ─────────────────────────────────────────────────────
     def _build_connection_tab(self):
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="🔌 Connection")
-        g = ttk.Frame(frame, padding=14)
-        g.pack(fill=tk.BOTH, expand=True)
+        outer = ttk.Frame(frame, padding=(12, 10))
+        outer.pack(fill=tk.BOTH, expand=True)
 
-        fields = [
-            ("Server  (/v:) *",  "server_var",  "", 30),
-            ("Port    (/port:)", "port_var",   "3389", 8),
-            ("Username (/u:)",   "user_var",   "", 26),
-            ("Domain  (/d:)",    "domain_var", "", 26),
-            ("Gateway (/g:)",    "gateway_var","", 30),
-        ]
-        for row, (label, attr, default, width) in enumerate(fields):
-            ttk.Label(g, text=label).grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 10))
-            var = tk.StringVar(value=default)
-            setattr(self, attr, var)
-            ttk.Entry(g, textvariable=var, width=width).grid(row=row, column=1, sticky=tk.W, pady=5)
-            var.trace_add("write", self._refresh_command_preview)
+        # ── Server ────────────────────────────────────────────────────────
+        srv_lf = ttk.LabelFrame(outer, text="Server", padding=(12, 8))
+        srv_lf.pack(fill=tk.X, pady=(0, 10))
+        srv = ttk.Frame(srv_lf)
+        srv.pack(fill=tk.X)
 
-        # Password row (special – show/hide toggle)
-        pw_row = len(fields)
-        ttk.Label(g, text="Password (/p:)").grid(row=pw_row, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        ttk.Label(srv, text="Address *:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        self.server_var = tk.StringVar()
+        self.server_var.trace_add("write", self._on_server_change)
+        server_entry = ttk.Entry(srv, textvariable=self.server_var, width=34)
+        server_entry.grid(row=0, column=1, sticky=tk.EW, pady=5)
+        Tooltip(server_entry, "Hostname or IP address of the Remote Desktop server (required).")
+
+        ttk.Label(srv, text="Port:").grid(row=1, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        self.port_var = tk.StringVar(value="3389")
+        self.port_var.trace_add("write", self._refresh_command_preview)
+        port_entry = ttk.Entry(srv, textvariable=self.port_var, width=8)
+        port_entry.grid(row=1, column=1, sticky=tk.W, pady=5)
+        Tooltip(port_entry, "Default RDP port is 3389. Change only if the server uses a non-standard port.")
+
+        ttk.Label(srv, text="Gateway:").grid(row=2, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        self.gateway_var = tk.StringVar()
+        self.gateway_var.trace_add("write", self._refresh_command_preview)
+        gw_entry = ttk.Entry(srv, textvariable=self.gateway_var, width=34)
+        gw_entry.grid(row=2, column=1, sticky=tk.EW, pady=5)
+        Tooltip(gw_entry, "Optional RDP gateway server address (/g:). Leave blank if not using a gateway.")
+
+        srv.columnconfigure(1, weight=1)
+
+        # ── Credentials ───────────────────────────────────────────────────
+        cred_lf = ttk.LabelFrame(outer, text="Credentials", padding=(12, 8))
+        cred_lf.pack(fill=tk.X)
+        cred = ttk.Frame(cred_lf)
+        cred.pack(fill=tk.X)
+
+        ttk.Label(cred, text="Username:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        self.user_var = tk.StringVar()
+        self.user_var.trace_add("write", self._refresh_command_preview)
+        ttk.Entry(cred, textvariable=self.user_var, width=28).grid(row=0, column=1, sticky=tk.EW, pady=5)
+
+        ttk.Label(cred, text="Domain:").grid(row=1, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        self.domain_var = tk.StringVar()
+        self.domain_var.trace_add("write", self._refresh_command_preview)
+        dom_entry = ttk.Entry(cred, textvariable=self.domain_var, width=28)
+        dom_entry.grid(row=1, column=1, sticky=tk.EW, pady=5)
+        Tooltip(dom_entry, "Windows domain name (/d:). Leave blank for local accounts.")
+
+        ttk.Label(cred, text="Password:").grid(row=2, column=0, sticky=tk.W, pady=5, padx=(0, 10))
         self.pass_var = tk.StringVar()
         self.pass_var.trace_add("write", self._refresh_command_preview)
-        pw_entry = ttk.Entry(g, textvariable=self.pass_var, width=26, show="●")
-        pw_entry.grid(row=pw_row, column=1, sticky=tk.W, pady=5)
+        pw_frame = ttk.Frame(cred)
+        pw_frame.grid(row=2, column=1, sticky=tk.EW, pady=5)
+        pw_entry = ttk.Entry(pw_frame, textvariable=self.pass_var, width=28, show="●")
+        pw_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.show_pass = tk.BooleanVar(value=False)
         ttk.Checkbutton(
-            g, text="Show",
+            pw_frame, text="Show",
             variable=self.show_pass,
             command=lambda: pw_entry.config(show="" if self.show_pass.get() else "●"),
-        ).grid(row=pw_row, column=2, padx=(8, 0), sticky=tk.W)
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
-        # Security note about passwords in CLI
-        note = ttk.Label(
-            g,
+        ttk.Label(
+            cred,
             text="⚠  Password will be visible in the process list.",
             foreground="#c0392b",
-        )
-        note.grid(row=pw_row + 1, column=0, columnspan=3, sticky=tk.W, pady=(0, 4))
+        ).grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=(2, 0))
 
-        g.columnconfigure(1, weight=1)
+        cred.columnconfigure(1, weight=1)
+
+    def _on_server_change(self, *_):
+        server = self.server_var.get().strip()
+        self.title(f"XFreeRDP GUI — {server}" if server else "XFreeRDP GUI")
+        self._refresh_command_preview()
 
     # ── Display tab ────────────────────────────────────────────────────────
     def _build_display_tab(self):
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="🖥️  Display")
-        g = ttk.Frame(frame, padding=14)
-        g.pack(fill=tk.BOTH, expand=True)
+        outer = ttk.Frame(frame, padding=(12, 10))
+        outer.pack(fill=tk.BOTH, expand=True)
 
-        row = 0
+        # ── Resolution ────────────────────────────────────────────────────
+        res_lf = ttk.LabelFrame(outer, text="Resolution", padding=(12, 8))
+        res_lf.pack(fill=tk.X, pady=(0, 10))
+        res = ttk.Frame(res_lf)
+        res.pack(fill=tk.X)
 
         self.fullscreen_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
-            g, text="Fullscreen  (/f)",
+            res, text="Fullscreen  (/f)",
             variable=self.fullscreen_var, command=self._refresh_command_preview,
-        ).grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=4)
-        row += 1
+        ).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=4)
 
         self.dynres_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            g, text="Dynamic Resolution  (/dynamic-resolution)",
+        dynres_cb = ttk.Checkbutton(
+            res, text="Dynamic resolution  (/dynamic-resolution)",
             variable=self.dynres_var, command=self._refresh_command_preview,
-        ).grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=4)
-        row += 1
+        )
+        dynres_cb.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=4)
+        Tooltip(dynres_cb, "Automatically adjusts the remote desktop resolution when you resize the window.")
 
-        # Width / Height
-        for label, attr, default in [
-            ("Width  (/w:)",  "width_var",  "1920"),
-            ("Height (/h:)",  "height_var", "1080"),
-        ]:
-            ttk.Label(g, text=label).grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        for r, (label, attr, default) in enumerate([
+            ("Width:",  "width_var",  "1920"),
+            ("Height:", "height_var", "1080"),
+        ], start=2):
+            ttk.Label(res, text=label).grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 10))
             var = tk.StringVar(value=default)
             setattr(self, attr, var)
-            ttk.Entry(g, textvariable=var, width=8).grid(row=row, column=1, sticky=tk.W, pady=4)
+            ttk.Entry(res, textvariable=var, width=8).grid(row=r, column=1, sticky=tk.W, pady=4)
             var.trace_add("write", self._refresh_command_preview)
-            row += 1
 
-        # Color depth
-        ttk.Label(g, text="Color depth (/bpp:)").grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        ttk.Label(res, text="Color depth:").grid(row=4, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.bpp_var = tk.StringVar(value="32")
-        ttk.Combobox(
-            g, textvariable=self.bpp_var,
+        bpp_cb = ttk.Combobox(
+            res, textvariable=self.bpp_var,
             values=["8", "15", "16", "24", "32"], width=6, state="readonly",
-        ).grid(row=row, column=1, sticky=tk.W, pady=4)
+        )
+        bpp_cb.grid(row=4, column=1, sticky=tk.W, pady=4)
         self.bpp_var.trace_add("write", self._refresh_command_preview)
-        row += 1
+        Tooltip(bpp_cb, "Color depth in bits per pixel. 32 bpp gives the best visual quality.")
 
-        # Checkboxes
+        res.columnconfigure(1, weight=1)
+
+        # ── Rendering ─────────────────────────────────────────────────────
+        rend_lf = ttk.LabelFrame(outer, text="Rendering", padding=(12, 8))
+        rend_lf.pack(fill=tk.X)
+
         bool_flags = [
-            ("GFX acceleration  (/gfx)",       "gfx_var",         True),
-            ("RemoteFX  (/rfx)",               "rfx_var",         False),
-            ("Smart sizing  (/smart-sizing)",  "smart_sizing_var", False),
-            ("Multi-monitor  (/multimon)",     "multimon_var",    False),
-            ("Span monitors  (/span)",         "span_var",        False),
+            ("GFX acceleration  (/gfx)",      "gfx_var",          True,  "Use graphics pipeline acceleration for better performance."),
+            ("RemoteFX  (/rfx)",              "rfx_var",          False, "Enable RemoteFX codec for improved graphics quality."),
+            ("Smart sizing  (/smart-sizing)", "smart_sizing_var", False, "Scale the remote desktop to fit the window."),
+            ("Multi-monitor  (/multimon)",    "multimon_var",     False, "Span the remote desktop across all local monitors."),
+            ("Span monitors  (/span)",        "span_var",         False, "Span the remote desktop across monitors (legacy flag)."),
         ]
-        for label, attr, default in bool_flags:
+        for label, attr, default, tip in bool_flags:
             var = tk.BooleanVar(value=default)
             setattr(self, attr, var)
-            ttk.Checkbutton(
-                g, text=label, variable=var, command=self._refresh_command_preview,
-            ).grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=3)
-            row += 1
-
-        g.columnconfigure(1, weight=1)
+            cb = ttk.Checkbutton(rend_lf, text=label, variable=var, command=self._refresh_command_preview)
+            cb.pack(anchor=tk.W, pady=3)
+            Tooltip(cb, tip)
 
     # ── Network tab ────────────────────────────────────────────────────────
     def _build_network_tab(self):
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="🌐 Network")
-        g = ttk.Frame(frame, padding=14)
-        g.pack(fill=tk.BOTH, expand=True)
+        outer = ttk.Frame(frame, padding=(12, 10))
+        outer.pack(fill=tk.BOTH, expand=True)
 
-        row = 0
-        ttk.Label(g, text="Network type  (/network:)").grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        # ── Connection quality ────────────────────────────────────────────
+        conn_lf = ttk.LabelFrame(outer, text="Connection Quality", padding=(12, 8))
+        conn_lf.pack(fill=tk.X, pady=(0, 10))
+        conn = ttk.Frame(conn_lf)
+        conn.pack(fill=tk.X)
+
+        ttk.Label(conn, text="Network type:").grid(row=0, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.network_var = tk.StringVar(value="lan")
-        ttk.Combobox(
-            g, textvariable=self.network_var,
+        net_cb = ttk.Combobox(
+            conn, textvariable=self.network_var,
             values=["modem", "broadband-low", "satellite", "broadband-high", "wan", "lan", "autodetect"],
             width=15, state="readonly",
-        ).grid(row=row, column=1, sticky=tk.W, pady=4)
+        )
+        net_cb.grid(row=0, column=1, sticky=tk.W, pady=4)
         self.network_var.trace_add("write", self._refresh_command_preview)
-        row += 1
+        Tooltip(net_cb, "Optimises RDP buffer and codec settings for the selected network type.")
 
-        bool_net = [
-            ("Compression  (+compression)",           "compression_var",   False),
-            ("Auto-reconnect  (+auto-reconnect)",     "autoreconnect_var",  True),
-        ]
-        for label, attr, default in bool_net:
-            var = tk.BooleanVar(value=default)
-            setattr(self, attr, var)
-            ttk.Checkbutton(
-                g, text=label, variable=var, command=self._refresh_command_preview,
-            ).grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=4)
-            row += 1
-
-        ttk.Label(g, text="Max reconnect retries  (/auto-reconnect-max-retries:)").grid(
-            row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10)
+        self.compression_var = tk.BooleanVar(value=False)
+        comp_cb = ttk.Checkbutton(
+            conn, text="Enable compression  (+compression)",
+            variable=self.compression_var, command=self._refresh_command_preview,
         )
+        comp_cb.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=4)
+        Tooltip(comp_cb, "Compress RDP traffic — most useful on slow or high-latency connections.")
+
+        conn.columnconfigure(1, weight=1)
+
+        # ── Auto-reconnect ────────────────────────────────────────────────
+        recon_lf = ttk.LabelFrame(outer, text="Auto-Reconnect", padding=(12, 8))
+        recon_lf.pack(fill=tk.X)
+        recon = ttk.Frame(recon_lf)
+        recon.pack(fill=tk.X)
+
+        self.autoreconnect_var = tk.BooleanVar(value=True)
+        ar_cb = ttk.Checkbutton(
+            recon, text="Enable auto-reconnect  (+auto-reconnect)",
+            variable=self.autoreconnect_var, command=self._refresh_command_preview,
+        )
+        ar_cb.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=4)
+        Tooltip(ar_cb, "Automatically reconnect if the session is interrupted.")
+
+        ttk.Label(recon, text="Max retries:").grid(row=1, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.reconnect_retries_var = tk.StringVar(value="20")
-        ttk.Entry(g, textvariable=self.reconnect_retries_var, width=6).grid(
-            row=row, column=1, sticky=tk.W, pady=4
-        )
+        retries_entry = ttk.Entry(recon, textvariable=self.reconnect_retries_var, width=6)
+        retries_entry.grid(row=1, column=1, sticky=tk.W, pady=4)
         self.reconnect_retries_var.trace_add("write", self._refresh_command_preview)
+        Tooltip(retries_entry, "Maximum number of automatic reconnection attempts.")
 
-        g.columnconfigure(1, weight=1)
+        recon.columnconfigure(1, weight=1)
 
     # ── Features tab ───────────────────────────────────────────────────────
     def _build_features_tab(self):
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="✨ Features")
-        g = ttk.Frame(frame, padding=14)
-        g.pack(fill=tk.BOTH, expand=True)
+        outer = ttk.Frame(frame, padding=(12, 10))
+        outer.pack(fill=tk.BOTH, expand=True)
 
-        row = 0
+        # ── Device redirection ────────────────────────────────────────────
+        redir_lf = ttk.LabelFrame(outer, text="Device Redirection", padding=(12, 8))
+        redir_lf.pack(fill=tk.X, pady=(0, 10))
+
         bool_feats = [
-            ("Clipboard redirection  (+clipboard)",  "clipboard_var",  True),
-            ("Audio playback  (/sound)",             "sound_var",      False),
-            ("Microphone  (/microphone)",            "mic_var",        False),
-            ("Printer  (/printer)",                  "printer_var",    False),
-            ("USB redirection  (/usb:id)",           "usb_var",        False),
+            ("Clipboard  (+clipboard)",   "clipboard_var", True,  "Share clipboard between local and remote desktop."),
+            ("Audio playback  (/sound)",  "sound_var",     False, "Redirect remote audio playback to local speakers."),
+            ("Microphone  (/microphone)", "mic_var",       False, "Redirect local microphone to the remote session."),
+            ("Printer  (/printer)",       "printer_var",   False, "Redirect local printers to the remote session."),
+            ("USB devices  (/usb:id)",    "usb_var",       False, "Redirect USB devices to the remote session."),
         ]
-        for label, attr, default in bool_feats:
+        for label, attr, default, tip in bool_feats:
             var = tk.BooleanVar(value=default)
             setattr(self, attr, var)
-            ttk.Checkbutton(
-                g, text=label, variable=var, command=self._refresh_command_preview,
-            ).grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=3)
-            row += 1
+            cb = ttk.Checkbutton(redir_lf, text=label, variable=var, command=self._refresh_command_preview)
+            cb.pack(anchor=tk.W, pady=3)
+            Tooltip(cb, tip)
 
-        # Drive redirection
-        ttk.Separator(g, orient=tk.HORIZONTAL).grid(
-            row=row, column=0, columnspan=3, sticky=tk.EW, pady=8
-        )
-        row += 1
-        ttk.Label(g, text="Drive redirection  (/drive:name,path)").grid(
-            row=row, column=0, columnspan=3, sticky=tk.W, pady=(0, 4)
-        )
-        row += 1
+        # ── Drive redirection ─────────────────────────────────────────────
+        drives_lf = ttk.LabelFrame(outer, text="Drive Redirection  (/drive:name,path)", padding=(12, 8))
+        drives_lf.pack(fill=tk.X, pady=(0, 10))
+        drives_inner = ttk.Frame(drives_lf)
+        drives_inner.pack(fill=tk.X)
 
-        drives_frame = ttk.Frame(g)
-        drives_frame.grid(row=row, column=0, columnspan=3, sticky=tk.EW)
-        self.drives_listbox = tk.Listbox(drives_frame, height=5, selectmode=tk.SINGLE)
+        self.drives_listbox = tk.Listbox(drives_inner, height=4, selectmode=tk.SINGLE)
         self.drives_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar = ttk.Scrollbar(drives_frame, orient=tk.VERTICAL, command=self.drives_listbox.yview)
-        scrollbar.pack(side=tk.LEFT, fill=tk.Y)
-        self.drives_listbox.configure(yscrollcommand=scrollbar.set)
-        dr_btns = ttk.Frame(drives_frame)
-        dr_btns.pack(side=tk.LEFT, padx=(6, 0), anchor=tk.N)
+        sb = ttk.Scrollbar(drives_inner, orient=tk.VERTICAL, command=self.drives_listbox.yview)
+        sb.pack(side=tk.LEFT, fill=tk.Y)
+        self.drives_listbox.configure(yscrollcommand=sb.set)
+        dr_btns = ttk.Frame(drives_inner)
+        dr_btns.pack(side=tk.LEFT, padx=(8, 0), anchor=tk.N)
         ttk.Button(dr_btns, text="➕ Add",    command=self._add_drive).pack(pady=2, fill=tk.X)
         ttk.Button(dr_btns, text="➖ Remove", command=self._remove_drive).pack(pady=2, fill=tk.X)
-        row += 1
 
-        # RemoteApp
-        ttk.Separator(g, orient=tk.HORIZONTAL).grid(
-            row=row, column=0, columnspan=3, sticky=tk.EW, pady=8
-        )
-        row += 1
-        ttk.Label(g, text="Remote App  (/app:)").grid(
-            row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10)
-        )
+        # ── Remote app ────────────────────────────────────────────────────
+        app_lf = ttk.LabelFrame(outer, text="Remote App", padding=(12, 8))
+        app_lf.pack(fill=tk.X)
+        app_grid = ttk.Frame(app_lf)
+        app_grid.pack(fill=tk.X)
+
+        ttk.Label(app_grid, text="App path  (/app:):").grid(row=0, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.app_var = tk.StringVar()
-        ttk.Entry(g, textvariable=self.app_var, width=36).grid(
-            row=row, column=1, sticky=tk.EW, pady=4
-        )
+        app_entry = ttk.Entry(app_grid, textvariable=self.app_var, width=36)
+        app_entry.grid(row=0, column=1, sticky=tk.EW, pady=4)
         self.app_var.trace_add("write", self._refresh_command_preview)
+        Tooltip(app_entry, "Launch a specific app instead of the full desktop, e.g. ||Explorer")
 
-        g.columnconfigure(1, weight=1)
+        app_grid.columnconfigure(1, weight=1)
 
     # ── Security tab ───────────────────────────────────────────────────────
     def _build_security_tab(self):
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="🔒 Security")
-        g = ttk.Frame(frame, padding=14)
-        g.pack(fill=tk.BOTH, expand=True)
+        outer = ttk.Frame(frame, padding=(12, 10))
+        outer.pack(fill=tk.BOTH, expand=True)
 
-        row = 0
-        ttk.Label(g, text="Certificate  (/cert:)").grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        # ── Certificate validation ────────────────────────────────────────
+        cert_lf = ttk.LabelFrame(outer, text="Certificate Validation", padding=(12, 8))
+        cert_lf.pack(fill=tk.X, pady=(0, 10))
+        cert_grid = ttk.Frame(cert_lf)
+        cert_grid.pack(fill=tk.X)
+
+        ttk.Label(cert_grid, text="Mode  (/cert:):").grid(row=0, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.cert_var = tk.StringVar(value="ignore")
-        ttk.Combobox(
-            g, textvariable=self.cert_var,
-            values=["ignore", "tofu", "deny"],
-            width=16,
-        ).grid(row=row, column=1, sticky=tk.W, pady=4)
+        cert_cb = ttk.Combobox(
+            cert_grid, textvariable=self.cert_var,
+            values=["ignore", "tofu", "deny"], width=16,
+        )
+        cert_cb.grid(row=0, column=1, sticky=tk.W, pady=4)
         self.cert_var.trace_add("write", self._refresh_command_preview)
-        row += 1
+        Tooltip(cert_cb, "ignore: accept all  |  tofu: trust on first use  |  deny: reject invalid")
 
-        ttk.Label(g, text="Security protocol  (/sec:)").grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        cert_grid.columnconfigure(1, weight=1)
+
+        # ── Protocol & auth ───────────────────────────────────────────────
+        proto_lf = ttk.LabelFrame(outer, text="Protocol & Authentication", padding=(12, 8))
+        proto_lf.pack(fill=tk.X)
+        proto_grid = ttk.Frame(proto_lf)
+        proto_grid.pack(fill=tk.X)
+
+        ttk.Label(proto_grid, text="Security protocol  (/sec:):").grid(
+            row=0, column=0, sticky=tk.W, pady=4, padx=(0, 10)
+        )
         self.sec_var = tk.StringVar(value="")
-        ttk.Combobox(
-            g, textvariable=self.sec_var,
-            values=["", "rdp", "tls", "nla", "ext"],
-            width=8, state="readonly",
-        ).grid(row=row, column=1, sticky=tk.W, pady=4)
+        sec_cb = ttk.Combobox(
+            proto_grid, textvariable=self.sec_var,
+            values=["", "rdp", "tls", "nla", "ext"], width=8, state="readonly",
+        )
+        sec_cb.grid(row=0, column=1, sticky=tk.W, pady=4)
         self.sec_var.trace_add("write", self._refresh_command_preview)
-        row += 1
+        Tooltip(sec_cb, "Leave blank for auto-negotiation (recommended).\nnla = Network Level Authentication.")
 
-        bool_sec = [
-            ("Disable authentication  (/authentication:0)", "noauth_var",  False),
-            ("Admin / console session  (/admin)",           "admin_var",   False),
-        ]
-        for label, attr, default in bool_sec:
-            var = tk.BooleanVar(value=default)
-            setattr(self, attr, var)
-            ttk.Checkbutton(
-                g, text=label, variable=var, command=self._refresh_command_preview,
-            ).grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=4)
-            row += 1
+        self.noauth_var = tk.BooleanVar(value=False)
+        noauth_cb = ttk.Checkbutton(
+            proto_grid, text="Disable authentication  (/authentication:0)",
+            variable=self.noauth_var, command=self._refresh_command_preview,
+        )
+        noauth_cb.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=4)
+        Tooltip(noauth_cb, "⚠ Disables authentication. Use only on isolated/trusted networks.")
 
-        g.columnconfigure(1, weight=1)
+        self.admin_var = tk.BooleanVar(value=False)
+        admin_cb = ttk.Checkbutton(
+            proto_grid, text="Admin / console session  (/admin)",
+            variable=self.admin_var, command=self._refresh_command_preview,
+        )
+        admin_cb.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=4)
+        Tooltip(admin_cb, "Connect to the administrative console session (session 0).")
+
+        proto_grid.columnconfigure(1, weight=1)
 
     # ── Advanced tab ───────────────────────────────────────────────────────
     def _build_advanced_tab(self):
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="⚙️  Advanced")
-        g = ttk.Frame(frame, padding=14)
-        g.pack(fill=tk.BOTH, expand=True)
+        outer = ttk.Frame(frame, padding=(12, 10))
+        outer.pack(fill=tk.BOTH, expand=True)
 
-        row = 0
-        ttk.Label(g, text="Extra flags:").grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        # ── Advanced options ──────────────────────────────────────────────
+        adv_lf = ttk.LabelFrame(outer, text="Advanced Options", padding=(12, 8))
+        adv_lf.pack(fill=tk.X, pady=(0, 10))
+        adv_grid = ttk.Frame(adv_lf)
+        adv_grid.pack(fill=tk.X)
+
+        ttk.Label(adv_grid, text="Extra flags:").grid(row=0, column=0, sticky=tk.W, pady=6, padx=(0, 10))
         self.extra_flags_var = tk.StringVar()
-        ttk.Entry(g, textvariable=self.extra_flags_var, width=46).grid(
-            row=row, column=1, columnspan=2, sticky=tk.EW, pady=4
-        )
+        extra_entry = ttk.Entry(adv_grid, textvariable=self.extra_flags_var, width=46)
+        extra_entry.grid(row=0, column=1, columnspan=2, sticky=tk.EW, pady=6)
         self.extra_flags_var.trace_add("write", self._refresh_command_preview)
-        row += 1
+        Tooltip(extra_entry, "Additional xfreerdp flags appended verbatim, e.g. /log-level:DEBUG")
 
-        ttk.Label(g, text="xfreerdp binary:").grid(row=row, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        ttk.Label(adv_grid, text="xfreerdp binary:").grid(row=1, column=0, sticky=tk.W, pady=6, padx=(0, 10))
         self.binary_var = tk.StringVar(value=self._find_xfreerdp())
-        bin_frame = ttk.Frame(g)
-        bin_frame.grid(row=row, column=1, columnspan=2, sticky=tk.EW, pady=4)
+        bin_frame = ttk.Frame(adv_grid)
+        bin_frame.grid(row=1, column=1, columnspan=2, sticky=tk.EW, pady=6)
         ttk.Entry(bin_frame, textvariable=self.binary_var, width=36).pack(
             side=tk.LEFT, fill=tk.X, expand=True
         )
@@ -515,12 +640,25 @@ class XFreeRDPApp(tk.Tk):
         )
         self.binary_var.trace_add("write", self._refresh_command_preview)
 
-        g.columnconfigure(1, weight=1)
+        adv_grid.columnconfigure(1, weight=1)
+
+        # ── Keyboard shortcuts reference ──────────────────────────────────
+        keys_lf = ttk.LabelFrame(outer, text="Keyboard Shortcuts", padding=(12, 8))
+        keys_lf.pack(fill=tk.X)
+
+        for key, action in [
+            ("Ctrl+Enter", "Connect to server"),
+            ("Ctrl+S",     "Save current profile"),
+        ]:
+            row_f = ttk.Frame(keys_lf)
+            row_f.pack(anchor=tk.W, pady=2)
+            ttk.Label(row_f, text=key, style="Shortcut.TLabel", width=14).pack(side=tk.LEFT)
+            ttk.Label(row_f, text=action).pack(side=tk.LEFT)
 
     # ── Command preview ────────────────────────────────────────────────────
     def _build_command_preview(self, parent):
-        self._preview_visible = True  # start packed, then hide below if needed
-        self._preview_lf = ttk.LabelFrame(parent, text="Command preview", padding=(6, 4))
+        self._preview_visible = True
+        self._preview_lf = ttk.LabelFrame(parent, text="Command Preview", padding=(6, 4))
         self._preview_lf.pack(fill=tk.X, pady=(8, 0))
 
         cmd_bg = "#1e1e2e" if self._dark_mode else "#f5f5f5"
@@ -539,26 +677,28 @@ class XFreeRDPApp(tk.Tk):
             pady=4,
         )
         self.cmd_text.pack(fill=tk.X)
-        ttk.Button(self._preview_lf, text="📋 Copy to clipboard", command=self._copy_command).pack(
-            anchor=tk.E, pady=(4, 2)
-        )
+
+        btn_row = ttk.Frame(self._preview_lf)
+        btn_row.pack(fill=tk.X, pady=(4, 2))
+        self._copy_btn = ttk.Button(btn_row, text="📋 Copy to clipboard", command=self._copy_command)
+        self._copy_btn.pack(side=tk.RIGHT)
 
     def _apply_initial_preview_state(self):
         """Called after bottom bar is built so before= reference is valid."""
         if not self._load_settings().get("preview_visible", False):
             self._preview_lf.pack_forget()
             self._preview_visible = False
-            self._preview_btn.config(text="👁️  Show")
+            self._preview_btn.config(text="👁️  Show preview")
         else:
-            self._preview_btn.config(text="👁️  Hide")
+            self._preview_btn.config(text="👁️  Hide preview")
 
     def _toggle_preview(self):
         if self._preview_visible:
             self._preview_lf.pack_forget()
-            self._preview_btn.config(text="👁️  Show")
+            self._preview_btn.config(text="👁️  Show preview")
         else:
             self._preview_lf.pack(fill=tk.X, pady=(8, 0), before=self._bottom_bar)
-            self._preview_btn.config(text="👁️  Hide")
+            self._preview_btn.config(text="👁️  Hide preview")
         self._preview_visible = not self._preview_visible
         self._save_settings()
 
@@ -567,6 +707,7 @@ class XFreeRDPApp(tk.Tk):
         self._bottom_bar = ttk.Frame(parent)
         self._bottom_bar.pack(fill=tk.X, pady=(8, 0))
 
+        # Right side
         ttk.Button(self._bottom_bar, text="⛔ Quit", command=self.quit).pack(side=tk.RIGHT, padx=(6, 0))
         ttk.Button(
             self._bottom_bar,
@@ -575,13 +716,35 @@ class XFreeRDPApp(tk.Tk):
             style="Connect.TButton",
         ).pack(side=tk.RIGHT)
 
+        # Left side
         theme_label = "☀ Light" if self._dark_mode else "☾ Dark"
-        self._theme_btn = ttk.Button(self._bottom_bar, text=theme_label, command=self._toggle_dark_mode, width=9)
+        self._theme_btn = ttk.Button(
+            self._bottom_bar, text=theme_label, command=self._toggle_dark_mode, width=9
+        )
         self._theme_btn.pack(side=tk.LEFT)
+        Tooltip(self._theme_btn, "Toggle light / dark colour scheme.")
 
-        self._preview_btn = ttk.Button(self._bottom_bar, text="👁️  Show", command=self._toggle_preview, width=10)
+        self._preview_btn = ttk.Button(
+            self._bottom_bar, text="👁️  Show preview", command=self._toggle_preview
+        )
         self._preview_btn.pack(side=tk.LEFT, padx=(6, 0))
+        Tooltip(self._preview_btn, "Show or hide the command preview panel.")
+
         self._apply_initial_preview_state()
+
+    # ── Status bar ──────────────────────────────────────────────────────────
+    def _build_status_bar(self, parent):
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(6, 0))
+        self._status_var = tk.StringVar(value="Ready  •  Ctrl+Enter to connect")
+        ttk.Label(
+            parent, textvariable=self._status_var,
+            anchor=tk.W, font=("", 8),
+        ).pack(fill=tk.X, pady=(2, 0))
+
+    def _set_status(self, msg: str):
+        if hasattr(self, "_status_var"):
+            self._status_var.set(msg)
+
     # ── Helpers ────────────────────────────────────────────────────────────
     @staticmethod
     def _find_xfreerdp():
@@ -729,23 +892,31 @@ class XFreeRDPApp(tk.Tk):
     def _copy_command(self):
         self.clipboard_clear()
         self.clipboard_append(" ".join(self._build_command()))
-        messagebox.showinfo("Copied", "Command copied to clipboard.")
+        self._copy_btn.config(text="✅ Copied!")
+        self.after(2000, lambda: self._copy_btn.config(text="📋 Copy to clipboard"))
+        self._set_status("Command copied to clipboard.")
 
     def _connect(self):
         if not self.server_var.get().strip():
-            messagebox.showerror("Validation", "Server address is required.")
+            messagebox.showerror("Validation Error", "A server address is required before connecting.")
+            self._set_status("Error: server address required.")
             return
         cmd = self._build_command()
+        server = self.server_var.get().strip()
+        self._set_status(f"Launching connection to {server} …")
         try:
             subprocess.Popen(cmd)  # noqa: S603 – user-controlled binary path
+            self._set_status(f"Connected to {server}.")
         except FileNotFoundError:
+            self._set_status("Error: xfreerdp binary not found.")
             messagebox.showerror(
-                "Not found",
+                "Binary Not Found",
                 f"Could not find xfreerdp at:\n  {self.binary_var.get()}\n\n"
                 "Install FreeRDP or set the correct path in the Advanced tab.",
             )
         except Exception as exc:
-            messagebox.showerror("Launch failed", f"Could not launch xfreerdp:\n{exc}")
+            self._set_status(f"Error: {exc}")
+            messagebox.showerror("Launch Failed", f"Could not launch xfreerdp:\n{exc}")
 
     # ── Profile management ─────────────────────────────────────────────────
     def _refresh_profile_list(self):
@@ -829,35 +1000,39 @@ class XFreeRDPApp(tk.Tk):
     def _save_profile(self):
         name = self.profile_var.get().strip()
         if not name:
-            messagebox.showerror("Validation", "Enter a profile name first.")
+            messagebox.showerror("Validation Error", "Enter a profile name first.")
             return
         self.profiles[name] = self._get_current_config()
         self._write_profiles()
         self._refresh_profile_list()
-        messagebox.showinfo("Saved", f"Profile «{name}» saved.")
+        self._set_status(f"Profile «{name}» saved.")
+        messagebox.showinfo("Profile Saved", f"Profile «{name}» has been saved.")
 
     def _load_profile(self):
         name = self.profile_var.get().strip()
         if name not in self.profiles:
-            messagebox.showerror("Not found", f"No profile named «{name}».")
+            messagebox.showerror("Profile Not Found", f"No profile named «{name}».")
             return
         self._apply_config(self.profiles[name])
+        self._set_status(f"Profile «{name}» loaded.")
 
     def _on_profile_selected(self, _event=None):
         name = self.profile_var.get().strip()
         if name in self.profiles:
             self._apply_config(self.profiles[name])
+            self._set_status(f"Profile «{name}» loaded.")
 
     def _delete_profile(self):
         name = self.profile_var.get().strip()
         if name not in self.profiles:
-            messagebox.showerror("Not found", f"No profile named «{name}».")
+            messagebox.showerror("Profile Not Found", f"No profile named «{name}».")
             return
-        if messagebox.askyesno("Confirm delete", f"Delete profile «{name}»?"):
+        if messagebox.askyesno("Confirm Delete", f"Permanently delete profile «{name}»?"):
             del self.profiles[name]
             self._write_profiles()
             self._refresh_profile_list()
             self.profile_var.set("")
+            self._set_status(f"Profile «{name}» deleted.")
 
     def _load_profiles(self):
         if PROFILES_FILE.exists():
