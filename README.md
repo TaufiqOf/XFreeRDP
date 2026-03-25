@@ -1,9 +1,9 @@
-# XFreeRDP GUI
+# ![Icon](icon.png) XFreeRDP GUI
 
 A graphical frontend for [FreeRDP](https://www.freerdp.com/) on Linux. Build and launch `xfreerdp` connections through a point-and-click interface — no need to remember command-line flags.
 
-![XFreeRDP GUI screenshot](icon.png)
 
+![XFreeRDP GUI screenshot](XFreeRDp.png)
 ---
 
 ## Features
