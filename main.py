@@ -7,6 +7,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from tkinter import font as tkfont
+from types import ModuleType
 from typing import Any
 import subprocess
 import json
@@ -14,12 +15,14 @@ import os
 import shutil
 from pathlib import Path
 
+sv_ttk: ModuleType | None
+
 try:
-    import sv_ttk
-    _sv_ttk: bool = True
+    import sv_ttk as _sv_ttk_module
+
+    sv_ttk = _sv_ttk_module
 except ImportError:
-    sv_ttk = None  # type: ignore[assignment]
-    _sv_ttk = False
+    sv_ttk = None
 
 
 def _detect_system_dark() -> bool:
@@ -319,16 +322,16 @@ class XFreeRDPApp(tk.Tk):
                 continue
 
     def _set_initial_window_size(self):
-        base_w = self._scaled(870)
-        base_h = self._scaled(800)
+        base_w = self._scaled(770)
+        base_h = self._scaled(660)
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
 
         # Keep the initial window fully visible on fractional scaling setups.
         win_w = min(base_w, int(screen_w * 0.96))
         win_h = min(base_h, int(screen_h * 0.92))
-        min_w = min(win_w, self._scaled(870))
-        min_h = min(win_h, self._scaled(800))
+        min_w = min(win_w, self._scaled(770))
+        min_h = min(win_h, self._scaled(660))
 
         self.geometry(f"{win_w}x{win_h}")
         self.minsize(min_w, min_h)
@@ -360,8 +363,8 @@ class XFreeRDPApp(tk.Tk):
 
     # ── Theme ──────────────────────────────────────────────────────────────
     def _apply_theme(self):
-        if _sv_ttk:
-            sv_ttk.set_theme("dark" if self._dark_mode else "light", self)  # type: ignore[union-attr]
+        if sv_ttk is not None:
+            sv_ttk.set_theme("dark" if self._dark_mode else "light", self)
         else:
             self._apply_manual_theme()
 
@@ -964,7 +967,7 @@ class XFreeRDPApp(tk.Tk):
         self._status_var = tk.StringVar(value="Ready  •  Ctrl+Enter to connect")
         ttk.Label(
             parent, textvariable=self._status_var,
-            anchor=tk.W, font=("", self._scaled(8)),
+            anchor=tk.W, font=self._app_font,
         ).pack(fill=tk.X, pady=(2, 0))
 
     def _set_status(self, msg: str):
