@@ -5,6 +5,7 @@ XFreeRDP GUI - A graphical frontend for FreeRDP on Linux
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from tkinter import font as tkfont
 import subprocess
 import json
 import os
@@ -96,13 +97,15 @@ class DriveDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Add Drive Redirection")
-        self.geometry("360x155")
+        dialog_w = parent._scaled(360)
+        dialog_h = parent._scaled(170)
+        self.geometry(f"{dialog_w}x{dialog_h}")
         self.resizable(False, False)
         self.result = None
         self.transient(parent)
         self.grab_set()
 
-        f = ttk.Frame(self, padding=15)
+        f = ttk.Frame(self, padding=parent._scaled(15))
         f.pack(fill=tk.BOTH, expand=True)
 
         ttk.Label(f, text="Share name:").grid(row=0, column=0, sticky=tk.W, pady=4)
@@ -151,8 +154,9 @@ class XFreeRDPApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("XFreeRDP GUI")
-        self.geometry("870x800")
-        self.minsize(870, 800)
+        self._init_display_scaling()
+        self._apply_global_font_scaling()
+        self._set_initial_window_size()
 
         ensure_config_dir()
         self.profiles = self._load_profiles()
@@ -166,6 +170,167 @@ class XFreeRDPApp(tk.Tk):
         # Global keyboard shortcuts
         self.bind("<Control-Return>", lambda _: self._connect())
         self.bind("<Control-s>",      lambda _: self._save_profile())
+
+    def _init_display_scaling(self):
+        """Capture Tk scaling and expose a helper for scaled UI metrics."""
+        baseline = 96.0 / 72.0
+        try:
+            tk_scaling = float(self.tk.call("tk", "scaling"))
+        except Exception:
+            tk_scaling = baseline
+
+        tk_scale = max(1.0, tk_scaling / baseline)
+        desktop_scale = self._detect_display_scale_hint()
+        override_scale = self._read_ui_scale_override()
+        self._ui_scale = max(1.0, override_scale or 1.0, tk_scale, desktop_scale)
+
+        # On some Linux fractional-scaling setups Tk reports 1.0; force a better value.
+        target_tk_scaling = baseline * self._ui_scale
+        if target_tk_scaling > tk_scaling + 0.01:
+            try:
+                self.tk.call("tk", "scaling", target_tk_scaling)
+            except Exception:
+                pass
+
+    def _read_ui_scale_override(self) -> float:
+        """Optional explicit override from env or settings.json (ui_scale)."""
+        raw_env = os.environ.get("XFREERDP_GUI_SCALE", "").strip()
+        if raw_env:
+            try:
+                env_scale = float(raw_env)
+            except ValueError:
+                env_scale = 0.0
+            if env_scale > 0:
+                return env_scale
+
+        cfg = self._load_settings()
+        raw_cfg = cfg.get("ui_scale")
+        if raw_cfg is None:
+            return 0.0
+        try:
+            cfg_scale = float(raw_cfg)
+        except (TypeError, ValueError):
+            return 0.0
+        return cfg_scale if cfg_scale > 0 else 0.0
+
+    @staticmethod
+    def _parse_gsettings_number(raw: str) -> float | None:
+        txt = raw.strip().replace("'", "")
+        # Handles outputs like: "1.25", "uint32 2", "0.9"
+        for token in txt.split():
+            try:
+                return float(token)
+            except ValueError:
+                continue
+        return None
+
+    def _gsettings_number(self, schema: str, key: str) -> float | None:
+        try:
+            result = subprocess.run(
+                ["gsettings", "get", schema, key],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except Exception:
+            return None
+        if result.returncode != 0:
+            return None
+        return self._parse_gsettings_number(result.stdout)
+
+    def _detect_display_scale_hint(self) -> float:
+        scale = 1.0
+
+        text_scale = self._gsettings_number(
+            "org.gnome.desktop.interface", "text-scaling-factor"
+        )
+        if text_scale and text_scale > 0:
+            scale = max(scale, text_scale)
+
+        gnome_scale = self._gsettings_number(
+            "org.gnome.desktop.interface", "scaling-factor"
+        )
+        if gnome_scale and gnome_scale > 1:
+            scale = max(scale, gnome_scale)
+
+        for env_key in ("GDK_SCALE", "QT_SCALE_FACTOR"):
+            raw = os.environ.get(env_key)
+            if not raw:
+                continue
+            try:
+                env_scale = float(raw)
+            except ValueError:
+                continue
+            if env_scale > 0:
+                scale = max(scale, env_scale)
+
+        # X11 desktops often expose effective text DPI here (e.g. 120 => 125%).
+        xft_scale = self._read_xft_dpi_scale()
+        if xft_scale > 0:
+            scale = max(scale, xft_scale)
+
+        return scale
+
+    @staticmethod
+    def _read_xft_dpi_scale() -> float:
+        try:
+            result = subprocess.run(
+                ["xrdb", "-query"], capture_output=True, text=True, timeout=2
+            )
+        except Exception:
+            return 0.0
+        if result.returncode != 0:
+            return 0.0
+
+        for line in result.stdout.splitlines():
+            if not line.lower().startswith("xft.dpi"):
+                continue
+            parts = line.split(":", 1)
+            if len(parts) != 2:
+                continue
+            try:
+                dpi = float(parts[1].strip())
+            except ValueError:
+                continue
+            if dpi > 0:
+                return dpi / 96.0
+        return 0.0
+
+    def _scaled(self, value: int) -> int:
+        return max(1, int(round(value * self._ui_scale)))
+
+    def _apply_global_font_scaling(self):
+        """Ensure named fonts are available; Tk scaling already handles font sizing."""
+        for font_name in (
+            "TkDefaultFont",
+            "TkTextFont",
+            "TkMenuFont",
+            "TkHeadingFont",
+            "TkCaptionFont",
+            "TkSmallCaptionFont",
+            "TkIconFont",
+            "TkTooltipFont",
+            "TkFixedFont",
+        ):
+            try:
+                tkfont.nametofont(font_name)
+            except tk.TclError:
+                continue
+
+    def _set_initial_window_size(self):
+        base_w = self._scaled(870)
+        base_h = self._scaled(800)
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+
+        # Keep the initial window fully visible on fractional scaling setups.
+        win_w = min(base_w, int(screen_w * 0.96))
+        win_h = min(base_h, int(screen_h * 0.92))
+        min_w = min(win_w, self._scaled(720))
+        min_h = min(win_h, self._scaled(560))
+
+        self.geometry(f"{win_w}x{win_h}")
+        self.minsize(min_w, min_h)
 
     # ── Window icon ─────────────────────────────────────────────────────
     def _set_window_icon(self):
@@ -198,10 +363,39 @@ class XFreeRDPApp(tk.Tk):
             sv_ttk.set_theme("dark" if self._dark_mode else "light", self)
         else:
             self._apply_manual_theme()
+
+        # Theme switches can reset font defaults, so apply scaling afterwards.
+        self._apply_global_font_scaling()
+
         style = ttk.Style(self)
-        style.configure("TNotebook.Tab", padding=[12, 5])
-        style.configure("Connect.TButton", font=("", 10, "bold"))
-        style.configure("Shortcut.TLabel", font=("", 9, "bold"))
+        # Build app-wide fonts from the already-scaled named fonts.
+        base_font = tkfont.nametofont("TkDefaultFont").copy()
+        bold_font = base_font.copy()
+        bold_font.configure(weight="bold")
+        mono_font = tkfont.nametofont("TkFixedFont").copy()
+        self._app_font = base_font
+        self._app_bold_font = bold_font
+        self._app_mono_font = mono_font
+
+        # Apply the same default font to all common ttk styles.
+        style.configure(".", font=self._app_font)
+        style.configure("TLabel", font=self._app_font)
+        style.configure("TButton", font=self._app_font)
+        style.configure("TCheckbutton", font=self._app_font)
+        style.configure("TEntry", font=self._app_font)
+        style.configure("TCombobox", font=self._app_font)
+        style.configure("TLabelframe", font=self._app_font)
+        style.configure("TLabelframe.Label", font=self._app_font)
+        style.configure("TNotebook.Tab", padding=[self._scaled(12), self._scaled(5)], font=self._app_font)
+
+        # Apply to classic Tk widgets as well.
+        self.option_add("*Font", self._app_font)
+        self.option_add("*Listbox.Font", self._app_font)
+
+        # Keep Connect button emphasis while matching the base UI font size.
+        style.configure("Connect.TButton", font=self._app_bold_font)
+
+        style.configure("Shortcut.TLabel", font=self._app_bold_font)
 
     def _apply_manual_theme(self):
         """Fallback dark/light colouring when sv-ttk is not available."""
@@ -229,10 +423,15 @@ class XFreeRDPApp(tk.Tk):
             style.map("TButton",                  background=[("active", "#5a5a5a")])
             style.configure("TCheckbutton",       background=bg, foreground=fg)
             style.configure("TScrollbar",         background=bg, troughcolor=trough)
-            style.configure("Shortcut.TLabel",    background=bg, foreground=fg, font=("", 9, "bold"))
+            style.configure(
+                "Shortcut.TLabel",
+                background=bg,
+                foreground=fg,
+                font=("", self._scaled(9), "bold"),
+            )
         else:
             style.theme_use("clam")
-            style.configure("Shortcut.TLabel",    font=("", 9, "bold"))
+            style.configure("Shortcut.TLabel", font=("", self._scaled(9), "bold"))
 
     def _toggle_dark_mode(self):
         self._dark_mode = not self._dark_mode
@@ -250,7 +449,7 @@ class XFreeRDPApp(tk.Tk):
 
     # ── Layout ─────────────────────────────────────────────────────────────
     def _build_ui(self):
-        root_pad = ttk.Frame(self, padding=10)
+        root_pad = ttk.Frame(self, padding=self._scaled(10))
         root_pad.pack(fill=tk.BOTH, expand=True)
 
         self._build_profile_bar(root_pad)
@@ -658,7 +857,11 @@ class XFreeRDPApp(tk.Tk):
     # ── Command preview ────────────────────────────────────────────────────
     def _build_command_preview(self, parent):
         self._preview_visible = True
-        self._preview_lf = ttk.LabelFrame(parent, text="Command Preview", padding=(6, 4))
+        self._preview_lf = ttk.LabelFrame(
+            parent,
+            text="Command Preview",
+            padding=(self._scaled(6), self._scaled(4)),
+        )
         self._preview_lf.pack(fill=tk.X, pady=(8, 0))
 
         cmd_bg = "#1e1e2e" if self._dark_mode else "#f5f5f5"
@@ -671,10 +874,10 @@ class XFreeRDPApp(tk.Tk):
             background=cmd_bg,
             foreground=cmd_fg,
             insertbackground=cmd_fg,
-            font=("Monospace", 9),
+            font=getattr(self, "_app_mono_font", tkfont.nametofont("TkFixedFont")),
             relief=tk.FLAT,
-            padx=6,
-            pady=4,
+            padx=self._scaled(6),
+            pady=self._scaled(4),
         )
         self.cmd_text.pack(fill=tk.X)
 
@@ -738,7 +941,7 @@ class XFreeRDPApp(tk.Tk):
         self._status_var = tk.StringVar(value="Ready  •  Ctrl+Enter to connect")
         ttk.Label(
             parent, textvariable=self._status_var,
-            anchor=tk.W, font=("", 8),
+            anchor=tk.W, font=("", self._scaled(8)),
         ).pack(fill=tk.X, pady=(2, 0))
 
     def _set_status(self, msg: str):
