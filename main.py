@@ -326,8 +326,8 @@ class XFreeRDPApp(tk.Tk):
         # Keep the initial window fully visible on fractional scaling setups.
         win_w = min(base_w, int(screen_w * 0.96))
         win_h = min(base_h, int(screen_h * 0.92))
-        min_w = min(win_w, self._scaled(720))
-        min_h = min(win_h, self._scaled(560))
+        min_w = min(win_w, self._scaled(870))
+        min_h = min(win_h, self._scaled(800))
 
         self.geometry(f"{win_w}x{win_h}")
         self.minsize(min_w, min_h)
