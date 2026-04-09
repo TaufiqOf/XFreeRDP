@@ -303,6 +303,14 @@ class XFreeRDPApp(tk.Tk):
     def _scaled(self, value: int) -> int:
         return max(1, int(round(value * self._ui_scale)))
 
+    def _desktop_scale_percent(self) -> int:
+        return max(100, int(round(self._ui_scale * 100)))
+
+    @staticmethod
+    def _freerdp_scale_value(scale_percent: int) -> int:
+        supported = (100, 140, 180)
+        return min(supported, key=lambda value: abs(value - scale_percent))
+
     def _apply_global_font_scaling(self):
         """Ensure named fonts are available; Tk scaling already handles font sizing."""
         for font_name in (
@@ -570,6 +578,28 @@ class XFreeRDPApp(tk.Tk):
         self.title(f"XFreeRDP GUI — {server}" if server else "XFreeRDP GUI")
         self._refresh_command_preview()
 
+    def _resolve_display_mode_conflict(self, *, prefer_dynamic: bool, notify: bool = False) -> None:
+        if not (self.dynres_var.get() and self.smart_sizing_var.get()):
+            return
+
+        if prefer_dynamic:
+            self.smart_sizing_var.set(False)
+            disabled = "Smart sizing"
+        else:
+            self.dynres_var.set(False)
+            disabled = "Dynamic resolution"
+
+        if notify:
+            self._set_status(f"Disabled {disabled}: it cannot be used together with the other scaling mode.")
+
+    def _on_dynamic_resolution_toggle(self) -> None:
+        self._resolve_display_mode_conflict(prefer_dynamic=True, notify=True)
+        self._refresh_command_preview()
+
+    def _on_smart_sizing_toggle(self) -> None:
+        self._resolve_display_mode_conflict(prefer_dynamic=False, notify=True)
+        self._refresh_command_preview()
+
     # ── Display tab ────────────────────────────────────────────────────────
     def _build_display_tab(self):
         frame = ttk.Frame(self.notebook)
@@ -592,28 +622,41 @@ class XFreeRDPApp(tk.Tk):
         self.dynres_var = tk.BooleanVar(value=True)
         dynres_cb = ttk.Checkbutton(
             res, text="Dynamic resolution  (/dynamic-resolution)",
-            variable=self.dynres_var, command=self._refresh_command_preview,
+            variable=self.dynres_var, command=self._on_dynamic_resolution_toggle,
         )
         dynres_cb.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=4)
         Tooltip(dynres_cb, "Automatically adjusts the remote desktop resolution when you resize the window.")
 
-        ttk.Label(res, text="Width:").grid(row=2, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        self.match_scale_var = tk.BooleanVar(value=self._ui_scale > 1.0)
+        match_scale_cb = ttk.Checkbutton(
+            res,
+            text=f"Match local display scaling  (/scale, /scale-desktop) [{self._desktop_scale_percent()}%]",
+            variable=self.match_scale_var,
+            command=self._refresh_command_preview,
+        )
+        match_scale_cb.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=4)
+        Tooltip(
+            match_scale_cb,
+            "Adjust the remote desktop for your local HiDPI or fractional scaling so content is not too small.",
+        )
+
+        ttk.Label(res, text="Width:").grid(row=3, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.width_var = tk.StringVar(value="1920")
-        ttk.Entry(res, textvariable=self.width_var, width=8).grid(row=2, column=1, sticky=tk.W, pady=4)
+        ttk.Entry(res, textvariable=self.width_var, width=8).grid(row=3, column=1, sticky=tk.W, pady=4)
         self.width_var.trace_add("write", self._refresh_command_preview)
 
-        ttk.Label(res, text="Height:").grid(row=3, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        ttk.Label(res, text="Height:").grid(row=4, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.height_var = tk.StringVar(value="1080")
-        ttk.Entry(res, textvariable=self.height_var, width=8).grid(row=3, column=1, sticky=tk.W, pady=4)
+        ttk.Entry(res, textvariable=self.height_var, width=8).grid(row=4, column=1, sticky=tk.W, pady=4)
         self.height_var.trace_add("write", self._refresh_command_preview)
 
-        ttk.Label(res, text="Color depth:").grid(row=4, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        ttk.Label(res, text="Color depth:").grid(row=5, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.bpp_var = tk.StringVar(value="32")
         bpp_cb = ttk.Combobox(
             res, textvariable=self.bpp_var,
             values=["8", "15", "16", "24", "32"], width=6, state="readonly",
         )
-        bpp_cb.grid(row=4, column=1, sticky=tk.W, pady=4)
+        bpp_cb.grid(row=5, column=1, sticky=tk.W, pady=4)
         self.bpp_var.trace_add("write", self._refresh_command_preview)
         Tooltip(bpp_cb, "Color depth in bits per pixel. 32 bpp gives the best visual quality.")
 
@@ -634,7 +677,7 @@ class XFreeRDPApp(tk.Tk):
         Tooltip(cb, "Enable RemoteFX codec for improved graphics quality.")
 
         self.smart_sizing_var = tk.BooleanVar(value=False)
-        cb = ttk.Checkbutton(rend_lf, text="Smart sizing  (/smart-sizing)", variable=self.smart_sizing_var, command=self._refresh_command_preview)
+        cb = ttk.Checkbutton(rend_lf, text="Smart sizing  (/smart-sizing)", variable=self.smart_sizing_var, command=self._on_smart_sizing_toggle)
         cb.pack(anchor=tk.W, pady=3)
         Tooltip(cb, "Scale the remote desktop to fit the window.")
 
@@ -1008,6 +1051,9 @@ class XFreeRDPApp(tk.Tk):
     def _build_command(self):
         cmd = [self.binary_var.get() or "xfreerdp"]
 
+        # FreeRDP rejects using /dynamic-resolution together with /smart-sizing.
+        self._resolve_display_mode_conflict(prefer_dynamic=True)
+
         server = self.server_var.get().strip()
         if server:
             port = self.port_var.get().strip()
@@ -1045,6 +1091,11 @@ class XFreeRDPApp(tk.Tk):
 
         if self.dynres_var.get():
             cmd.append("/dynamic-resolution")
+
+        if self.match_scale_var.get():
+            scale_percent = self._desktop_scale_percent()
+            cmd.append(f"/scale:{self._freerdp_scale_value(scale_percent)}")
+            cmd.append(f"/scale-desktop:{scale_percent}")
 
         bpp = self.bpp_var.get().strip()
         if bpp and bpp != "32":
@@ -1161,6 +1212,7 @@ class XFreeRDPApp(tk.Tk):
             "gateway":           self.gateway_var.get(),
             "fullscreen":        self.fullscreen_var.get(),
             "dynres":            self.dynres_var.get(),
+            "match_scale":       self.match_scale_var.get(),
             "width":             self.width_var.get(),
             "height":            self.height_var.get(),
             "bpp":               self.bpp_var.get(),
@@ -1197,6 +1249,7 @@ class XFreeRDPApp(tk.Tk):
         self.gateway_var.set(cfg.get("gateway", ""))
         self.fullscreen_var.set(cfg.get("fullscreen", False))
         self.dynres_var.set(cfg.get("dynres", True))
+        self.match_scale_var.set(cfg.get("match_scale", self._ui_scale > 1.0))
         self.width_var.set(cfg.get("width", "1920"))
         self.height_var.set(cfg.get("height", "1080"))
         self.bpp_var.set(cfg.get("bpp", "32"))
@@ -1205,6 +1258,7 @@ class XFreeRDPApp(tk.Tk):
         self.smart_sizing_var.set(cfg.get("smart_sizing", False))
         self.multimon_var.set(cfg.get("multimon", False))
         self.span_var.set(cfg.get("span", False))
+        self._resolve_display_mode_conflict(prefer_dynamic=True)
         self.network_var.set(cfg.get("network", "lan"))
         self.compression_var.set(cfg.get("compression", False))
         self.autoreconnect_var.set(cfg.get("autoreconnect", True))
