@@ -2,10 +2,12 @@
 """
 XFreeRDP GUI - A graphical frontend for FreeRDP on Linux
 """
+from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from tkinter import font as tkfont
+from typing import Any
 import subprocess
 import json
 import os
@@ -14,9 +16,10 @@ from pathlib import Path
 
 try:
     import sv_ttk
-    _SV_TTK = True
+    _sv_ttk: bool = True
 except ImportError:
-    _SV_TTK = False
+    sv_ttk = None  # type: ignore[assignment]
+    _sv_ttk = False
 
 
 def _detect_system_dark() -> bool:
@@ -55,14 +58,14 @@ def ensure_config_dir():
 class Tooltip:
     """Simple hover tooltip for any tkinter widget."""
 
-    def __init__(self, widget, text: str):
+    def __init__(self, widget: tk.Widget, text: str):
         self._widget = widget
         self._text = text
         self._tip_window = None
         widget.bind("<Enter>", self._show)
         widget.bind("<Leave>", self._hide)
 
-    def _show(self, _event=None):
+    def _show(self, _event: tk.Event[Any] | None = None) -> None:
         if self._tip_window or not self._text:
             return
         x = self._widget.winfo_rootx() + 20
@@ -84,7 +87,7 @@ class Tooltip:
             justify=tk.LEFT,
         ).pack()
 
-    def _hide(self, _event=None):
+    def _hide(self, _event: tk.Event[Any] | None = None) -> None:
         if self._tip_window:
             self._tip_window.destroy()
             self._tip_window = None
@@ -94,18 +97,16 @@ class Tooltip:
 # Drive-redirection dialog
 # ─────────────────────────────────────────────────────────────────────────────
 class DriveDialog(tk.Toplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("Add Drive Redirection")
-        dialog_w = parent._scaled(360)
-        dialog_h = parent._scaled(170)
+    def __init__(self, parent: XFreeRDPApp):
+        dialog_w = parent._scaled(360)  # type: ignore[reportPrivateUsage]
+        dialog_h = parent._scaled(170)  # type: ignore[reportPrivateUsage]
         self.geometry(f"{dialog_w}x{dialog_h}")
         self.resizable(False, False)
         self.result = None
         self.transient(parent)
         self.grab_set()
 
-        f = ttk.Frame(self, padding=parent._scaled(15))
+        f = ttk.Frame(self, padding=parent._scaled(15))  # type: ignore[reportPrivateUsage]
         f.pack(fill=tk.BOTH, expand=True)
 
         ttk.Label(f, text="Share name:").grid(row=0, column=0, sticky=tk.W, pady=4)
@@ -359,8 +360,8 @@ class XFreeRDPApp(tk.Tk):
 
     # ── Theme ──────────────────────────────────────────────────────────────
     def _apply_theme(self):
-        if _SV_TTK:
-            sv_ttk.set_theme("dark" if self._dark_mode else "light", self)
+        if _sv_ttk:
+            sv_ttk.set_theme("dark" if self._dark_mode else "light", self)  # type: ignore[union-attr]
         else:
             self._apply_manual_theme()
 
@@ -389,8 +390,8 @@ class XFreeRDPApp(tk.Tk):
         style.configure("TNotebook.Tab", padding=[self._scaled(12), self._scaled(5)], font=self._app_font)
 
         # Apply to classic Tk widgets as well.
-        self.option_add("*Font", self._app_font)
-        self.option_add("*Listbox.Font", self._app_font)
+        self.option_add("*Font", self._app_font)  # type: ignore[no-untyped-call]
+        self.option_add("*Listbox.Font", self._app_font)  # type: ignore[no-untyped-call]
 
         # Keep Connect button emphasis while matching the base UI font size.
         style.configure("Connect.TButton", font=self._app_bold_font)
@@ -469,7 +470,7 @@ class XFreeRDPApp(tk.Tk):
         self._build_status_bar(root_pad)
 
     # ── Profile bar ────────────────────────────────────────────────────────
-    def _build_profile_bar(self, parent):
+    def _build_profile_bar(self, parent: ttk.Frame) -> None:
         bar = ttk.LabelFrame(parent, text="Profiles", padding=(8, 6))
         bar.pack(fill=tk.X, pady=(0, 4))
 
@@ -561,7 +562,7 @@ class XFreeRDPApp(tk.Tk):
 
         cred.columnconfigure(1, weight=1)
 
-    def _on_server_change(self, *_):
+    def _on_server_change(self, *_: object) -> None:
         server = self.server_var.get().strip()
         self.title(f"XFreeRDP GUI — {server}" if server else "XFreeRDP GUI")
         self._refresh_command_preview()
@@ -593,15 +594,15 @@ class XFreeRDPApp(tk.Tk):
         dynres_cb.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=4)
         Tooltip(dynres_cb, "Automatically adjusts the remote desktop resolution when you resize the window.")
 
-        for r, (label, attr, default) in enumerate([
-            ("Width:",  "width_var",  "1920"),
-            ("Height:", "height_var", "1080"),
-        ], start=2):
-            ttk.Label(res, text=label).grid(row=r, column=0, sticky=tk.W, pady=4, padx=(0, 10))
-            var = tk.StringVar(value=default)
-            setattr(self, attr, var)
-            ttk.Entry(res, textvariable=var, width=8).grid(row=r, column=1, sticky=tk.W, pady=4)
-            var.trace_add("write", self._refresh_command_preview)
+        ttk.Label(res, text="Width:").grid(row=2, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        self.width_var = tk.StringVar(value="1920")
+        ttk.Entry(res, textvariable=self.width_var, width=8).grid(row=2, column=1, sticky=tk.W, pady=4)
+        self.width_var.trace_add("write", self._refresh_command_preview)
+
+        ttk.Label(res, text="Height:").grid(row=3, column=0, sticky=tk.W, pady=4, padx=(0, 10))
+        self.height_var = tk.StringVar(value="1080")
+        ttk.Entry(res, textvariable=self.height_var, width=8).grid(row=3, column=1, sticky=tk.W, pady=4)
+        self.height_var.trace_add("write", self._refresh_command_preview)
 
         ttk.Label(res, text="Color depth:").grid(row=4, column=0, sticky=tk.W, pady=4, padx=(0, 10))
         self.bpp_var = tk.StringVar(value="32")
@@ -619,19 +620,30 @@ class XFreeRDPApp(tk.Tk):
         rend_lf = ttk.LabelFrame(outer, text="Rendering", padding=(12, 8))
         rend_lf.pack(fill=tk.X)
 
-        bool_flags = [
-            ("GFX acceleration  (/gfx)",      "gfx_var",          True,  "Use graphics pipeline acceleration for better performance."),
-            ("RemoteFX  (/rfx)",              "rfx_var",          False, "Enable RemoteFX codec for improved graphics quality."),
-            ("Smart sizing  (/smart-sizing)", "smart_sizing_var", False, "Scale the remote desktop to fit the window."),
-            ("Multi-monitor  (/multimon)",    "multimon_var",     False, "Span the remote desktop across all local monitors."),
-            ("Span monitors  (/span)",        "span_var",         False, "Span the remote desktop across monitors (legacy flag)."),
-        ]
-        for label, attr, default, tip in bool_flags:
-            var = tk.BooleanVar(value=default)
-            setattr(self, attr, var)
-            cb = ttk.Checkbutton(rend_lf, text=label, variable=var, command=self._refresh_command_preview)
-            cb.pack(anchor=tk.W, pady=3)
-            Tooltip(cb, tip)
+        self.gfx_var = tk.BooleanVar(value=True)
+        cb = ttk.Checkbutton(rend_lf, text="GFX acceleration  (/gfx)", variable=self.gfx_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Use graphics pipeline acceleration for better performance.")
+
+        self.rfx_var = tk.BooleanVar(value=False)
+        cb = ttk.Checkbutton(rend_lf, text="RemoteFX  (/rfx)", variable=self.rfx_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Enable RemoteFX codec for improved graphics quality.")
+
+        self.smart_sizing_var = tk.BooleanVar(value=False)
+        cb = ttk.Checkbutton(rend_lf, text="Smart sizing  (/smart-sizing)", variable=self.smart_sizing_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Scale the remote desktop to fit the window.")
+
+        self.multimon_var = tk.BooleanVar(value=False)
+        cb = ttk.Checkbutton(rend_lf, text="Multi-monitor  (/multimon)", variable=self.multimon_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Span the remote desktop across all local monitors.")
+
+        self.span_var = tk.BooleanVar(value=False)
+        cb = ttk.Checkbutton(rend_lf, text="Span monitors  (/span)", variable=self.span_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Span the remote desktop across monitors (legacy flag).")
 
     # ── Network tab ────────────────────────────────────────────────────────
     def _build_network_tab(self):
@@ -701,19 +713,30 @@ class XFreeRDPApp(tk.Tk):
         redir_lf = ttk.LabelFrame(outer, text="Device Redirection", padding=(12, 8))
         redir_lf.pack(fill=tk.X, pady=(0, 10))
 
-        bool_feats = [
-            ("Clipboard  (+clipboard)",   "clipboard_var", True,  "Share clipboard between local and remote desktop."),
-            ("Audio playback  (/sound)",  "sound_var",     False, "Redirect remote audio playback to local speakers."),
-            ("Microphone  (/microphone)", "mic_var",       False, "Redirect local microphone to the remote session."),
-            ("Printer  (/printer)",       "printer_var",   False, "Redirect local printers to the remote session."),
-            ("USB devices  (/usb:id)",    "usb_var",       False, "Redirect USB devices to the remote session."),
-        ]
-        for label, attr, default, tip in bool_feats:
-            var = tk.BooleanVar(value=default)
-            setattr(self, attr, var)
-            cb = ttk.Checkbutton(redir_lf, text=label, variable=var, command=self._refresh_command_preview)
-            cb.pack(anchor=tk.W, pady=3)
-            Tooltip(cb, tip)
+        self.clipboard_var = tk.BooleanVar(value=True)
+        cb = ttk.Checkbutton(redir_lf, text="Clipboard  (+clipboard)", variable=self.clipboard_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Share clipboard between local and remote desktop.")
+
+        self.sound_var = tk.BooleanVar(value=False)
+        cb = ttk.Checkbutton(redir_lf, text="Audio playback  (/sound)", variable=self.sound_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Redirect remote audio playback to local speakers.")
+
+        self.mic_var = tk.BooleanVar(value=False)
+        cb = ttk.Checkbutton(redir_lf, text="Microphone  (/microphone)", variable=self.mic_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Redirect local microphone to the remote session.")
+
+        self.printer_var = tk.BooleanVar(value=False)
+        cb = ttk.Checkbutton(redir_lf, text="Printer  (/printer)", variable=self.printer_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Redirect local printers to the remote session.")
+
+        self.usb_var = tk.BooleanVar(value=False)
+        cb = ttk.Checkbutton(redir_lf, text="USB devices  (/usb:id)", variable=self.usb_var, command=self._refresh_command_preview)
+        cb.pack(anchor=tk.W, pady=3)
+        Tooltip(cb, "Redirect USB devices to the remote session.")
 
         # ── Drive redirection ─────────────────────────────────────────────
         drives_lf = ttk.LabelFrame(outer, text="Drive Redirection  (/drive:name,path)", padding=(12, 8))
@@ -723,7 +746,7 @@ class XFreeRDPApp(tk.Tk):
 
         self.drives_listbox = tk.Listbox(drives_inner, height=4, selectmode=tk.SINGLE)
         self.drives_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        sb = ttk.Scrollbar(drives_inner, orient=tk.VERTICAL, command=self.drives_listbox.yview)
+        sb = ttk.Scrollbar(drives_inner, orient=tk.VERTICAL, command=self.drives_listbox.yview)  # type: ignore[arg-type]
         sb.pack(side=tk.LEFT, fill=tk.Y)
         self.drives_listbox.configure(yscrollcommand=sb.set)
         dr_btns = ttk.Frame(drives_inner)
@@ -855,7 +878,7 @@ class XFreeRDPApp(tk.Tk):
             ttk.Label(row_f, text=action).pack(side=tk.LEFT)
 
     # ── Command preview ────────────────────────────────────────────────────
-    def _build_command_preview(self, parent):
+    def _build_command_preview(self, parent: ttk.Frame) -> None:
         self._preview_visible = True
         self._preview_lf = ttk.LabelFrame(
             parent,
@@ -906,7 +929,7 @@ class XFreeRDPApp(tk.Tk):
         self._save_settings()
 
     # ── Bottom buttons ─────────────────────────────────────────────────────
-    def _build_bottom_buttons(self, parent):
+    def _build_bottom_buttons(self, parent: ttk.Frame) -> None:
         self._bottom_bar = ttk.Frame(parent)
         self._bottom_bar.pack(fill=tk.X, pady=(8, 0))
 
@@ -936,7 +959,7 @@ class XFreeRDPApp(tk.Tk):
         self._apply_initial_preview_state()
 
     # ── Status bar ──────────────────────────────────────────────────────────
-    def _build_status_bar(self, parent):
+    def _build_status_bar(self, parent: ttk.Frame) -> None:
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(6, 0))
         self._status_var = tk.StringVar(value="Ready  •  Ctrl+Enter to connect")
         ttk.Label(
@@ -973,9 +996,9 @@ class XFreeRDPApp(tk.Tk):
             self._refresh_command_preview()
 
     def _remove_drive(self):
-        sel = self.drives_listbox.curselection()
+        sel: tuple[int, ...] = self.drives_listbox.curselection()  # type: ignore[assignment]
         if sel:
-            self.drives_listbox.delete(sel[0])
+            self.drives_listbox.delete(sel[0])  # type: ignore[arg-type]
             self._refresh_command_preview()
 
     # ── Command builder ────────────────────────────────────────────────────
@@ -1060,7 +1083,7 @@ class XFreeRDPApp(tk.Tk):
             cmd.append("/usb:id")
 
         for i in range(self.drives_listbox.size()):
-            cmd.append(f"/drive:{self.drives_listbox.get(i)}")
+            cmd.append(f"/drive:{self.drives_listbox.get(i)}")  # type: ignore[misc]
 
         app = self.app_var.get().strip()
         if app:
@@ -1085,7 +1108,7 @@ class XFreeRDPApp(tk.Tk):
 
         return cmd
 
-    def _refresh_command_preview(self, *_args):
+    def _refresh_command_preview(self, *_args: object) -> None:
         cmd_str = " ".join(self._build_command())
         self.cmd_text.config(state=tk.NORMAL)
         self.cmd_text.delete("1.0", tk.END)
@@ -1125,7 +1148,7 @@ class XFreeRDPApp(tk.Tk):
     def _refresh_profile_list(self):
         self.profile_combo["values"] = sorted(self.profiles.keys())
 
-    def _get_current_config(self):
+    def _get_current_config(self) -> dict[str, Any]:
         return {
             "server":            self.server_var.get(),
             "port":              self.port_var.get(),
@@ -1152,7 +1175,7 @@ class XFreeRDPApp(tk.Tk):
             "mic":               self.mic_var.get(),
             "printer":           self.printer_var.get(),
             "usb":               self.usb_var.get(),
-            "drives":            [self.drives_listbox.get(i) for i in range(self.drives_listbox.size())],
+            "drives":            [str(self.drives_listbox.get(i)) for i in range(self.drives_listbox.size())],  # type: ignore[misc, arg-type]
             "app":               self.app_var.get(),
             "cert":              self.cert_var.get(),
             "sec":               self.sec_var.get(),
@@ -1162,7 +1185,7 @@ class XFreeRDPApp(tk.Tk):
             "binary":            self.binary_var.get(),
         }
 
-    def _apply_config(self, cfg):
+    def _apply_config(self, cfg: dict[str, Any]) -> None:
         self.server_var.set(cfg.get("server", ""))
         self.port_var.set(cfg.get("port", "3389"))
         self.user_var.set(cfg.get("user", ""))
@@ -1219,7 +1242,7 @@ class XFreeRDPApp(tk.Tk):
         self._apply_config(self.profiles[name])
         self._set_status(f"Profile «{name}» loaded.")
 
-    def _on_profile_selected(self, _event=None):
+    def _on_profile_selected(self, _event: tk.Event[Any] | None = None) -> None:
         name = self.profile_var.get().strip()
         if name in self.profiles:
             self._apply_config(self.profiles[name])
@@ -1237,7 +1260,7 @@ class XFreeRDPApp(tk.Tk):
             self.profile_var.set("")
             self._set_status(f"Profile «{name}» deleted.")
 
-    def _load_profiles(self):
+    def _load_profiles(self) -> dict[str, Any]:
         if PROFILES_FILE.exists():
             try:
                 with open(PROFILES_FILE) as fh:
@@ -1256,7 +1279,7 @@ class XFreeRDPApp(tk.Tk):
     def _save_theme_setting(self):
         self._save_settings()
 
-    def _load_settings(self) -> dict:
+    def _load_settings(self) -> dict[str, Any]:
         if SETTINGS_FILE.exists():
             try:
                 with open(SETTINGS_FILE) as fh:
