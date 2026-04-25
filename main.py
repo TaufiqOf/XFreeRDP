@@ -101,9 +101,7 @@ class Tooltip:
 # ─────────────────────────────────────────────────────────────────────────────
 class DriveDialog(tk.Toplevel):
     def __init__(self, parent: XFreeRDPApp):
-        dialog_w = parent._scaled(360)  # type: ignore[reportPrivateUsage]
-        dialog_h = parent._scaled(170)  # type: ignore[reportPrivateUsage]
-        self.geometry(f"{dialog_w}x{dialog_h}")
+        super().__init__(parent)
         self.resizable(False, False)
         self.result = None
         self.transient(parent)
@@ -160,7 +158,6 @@ class XFreeRDPApp(tk.Tk):
         self.title("XFreeRDP GUI")
         self._init_display_scaling()
         self._apply_global_font_scaling()
-        self._set_initial_window_size()
 
         ensure_config_dir()
         self.profiles = self._load_profiles()
@@ -170,6 +167,7 @@ class XFreeRDPApp(tk.Tk):
         self._set_window_icon()
         self._build_ui()
         self._refresh_command_preview()
+        self._set_initial_window_size()
 
         # Global keyboard shortcuts
         self.bind("<Control-Return>", lambda _: self._connect())
@@ -330,19 +328,20 @@ class XFreeRDPApp(tk.Tk):
                 continue
 
     def _set_initial_window_size(self):
-        base_w = self._scaled(770)
-        base_h = self._scaled(660)
+        # Use the actual required size from the built UI so that the geometry
+        # is always in the correct coordinate space (logical vs physical pixels)
+        # regardless of compositor/fractional-scaling settings.
+        self.update_idletasks()
+        req_w = self.winfo_reqwidth()
+        req_h = self.winfo_reqheight()
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
 
-        # Keep the initial window fully visible on fractional scaling setups.
-        win_w = min(base_w, int(screen_w * 0.96))
-        win_h = min(base_h, int(screen_h * 0.92))
-        min_w = min(win_w, self._scaled(770))
-        min_h = min(win_h, self._scaled(660))
+        win_w = min(req_w, int(screen_w * 0.96))
+        win_h = min(req_h, int(screen_h * 0.92))
 
         self.geometry(f"{win_w}x{win_h}")
-        self.minsize(min_w, min_h)
+        self.minsize(self._scaled(500), self._scaled(400))
 
     # ── Window icon ─────────────────────────────────────────────────────
     def _set_window_icon(self):
