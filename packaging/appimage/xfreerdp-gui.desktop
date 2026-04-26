@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=XFreeRDP GUI
+Comment=Graphical frontend for FreeRDP
+Exec=xfreerdp-gui
+Icon=xfreerdp-gui
+Terminal=false
+Categories=Network;RemoteAccess;
+Keywords=rdp;freerdp;remote;desktop;
