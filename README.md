@@ -115,6 +115,47 @@ python3 main.py
 
 ---
 
+## Build an AppImage
+
+This repository includes a build script that packages the app as a single `.AppImage`.
+
+### Requirements for AppImage build
+
+- `python3` and `pip`
+- `appimagetool` (from AppImageKit releases)
+
+Install build-only Python dependency:
+
+```bash
+python3 -m pip install --user pyinstaller
+```
+
+Ensure `appimagetool` is available:
+
+```bash
+appimagetool --version
+```
+
+### Build command
+
+```bash
+chmod +x scripts/build_appimage.sh
+./scripts/build_appimage.sh
+```
+
+Output file:
+
+```bash
+build/appimage/XFreeRDP-GUI-<arch>.AppImage
+```
+
+Notes:
+
+- The AppImage bundles your GUI app runtime.
+- `xfreerdp` itself is still expected on the target Linux system (`xfreerdp` in `PATH`).
+
+---
+
 ## (Optional) Add to the application menu
 
 To make XFreeRDP GUI appear in your desktop application launcher, install the `.desktop` file:
